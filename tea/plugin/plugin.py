@@ -1,37 +1,25 @@
-from .handler import EventHandler
+import asyncio
+from tea.errors import TeaException
+from tea.priority import *
 
 
 class Plugin:
+    name = None
+
     def __init__(self):
-        self.handlers = []
         self.tea = None
+        self.events = []
 
-    def set_tea(self, tea):
+    def setup(self, tea):
         self.tea = tea
+        return self.events
 
-    def event(self, *args, **kwargs):
-        def decorator(func):
-            result = create_event_handler(*args, **kwargs)(func)
-            self.add_event(result)
-            return result
+    def event(self, priority=NORMAL):
 
+        def decorator(coro):
+            if not asyncio.iscoroutinefunction(coro):
+                raise TeaException('event registered must be a coroutine function')
+            self.events.append((coro, priority))
+            return coro
         return decorator
-
-    def add_event(self, handler: EventHandler):
-        self.handlers.append(handler)
-
-    async def connector_event(self, event, *args, **kwargs):
-        connector = kwargs.get('connector', None)
-        for handler in self.handlers:
-            if handler.name == event and connector == handler.connector:
-                result = await handler.do(*args, **kwargs)
-                print(result)
-
-
-def create_event_handler(name=None, **attrs):
-
-    def decorator(func):
-        event_name = name or func.__name__
-        return EventHandler(event_name, func, **attrs)
-    return decorator
 

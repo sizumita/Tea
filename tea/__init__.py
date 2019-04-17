@@ -1,2 +1,3 @@
-from tea.tea import Tea
-from tea.plugin.plugin import Plugin
+from .tea import Tea
+from .plugin.plugin import Plugin
+
