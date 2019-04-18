@@ -23,9 +23,9 @@ class Tea:
             name = coro.__name__
             if name.startswith("on_"):
                 name = name[3:]
-            if not coro.__name__ in self._events.keys():
-                self._events[coro.__name__] = OrderedDict(LOWEST=[], LOW=[], NORMAL=[], HIGH=[], HIGHEST=[], MONITOR=[])
-            self._events[coro.__name__][priority].append(coro)
+            if not name in self._events.keys():
+                self._events[name] = OrderedDict(LOWEST=[], LOW=[], NORMAL=[], HIGH=[], HIGHEST=[], MONITOR=[])
+            self._events[name][priority].append(coro)
 
     def dispatch(self, event, *args, **kwargs):
         method = 'on_' + event
