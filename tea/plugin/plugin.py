@@ -9,9 +9,11 @@ class Plugin:
     def __init__(self):
         self.tea = None
         self.events = []
+        self.setting = {}
 
-    def setup(self, tea):
+    def setup(self, tea, setting):
         self.tea = tea
+        self.setting = setting
         return self.events
 
     def event(self, priority=NORMAL):

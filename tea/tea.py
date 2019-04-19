@@ -10,11 +10,14 @@ from .plugin.plugin import Plugin
 class Tea:
     _listeners = {}
     _events = {}
+    candidacy_connectors = {}
+    connectors = {}
 
     def __init__(self, plugin_filepath="plugins", loop=None):
         self.loop = loop if loop else asyncio.get_event_loop()
         self.manager = PluginManager(self, plugin_filepath)
         self.manager.register_plugins()
+        self._ready = asyncio.Event(loop=self.loop)
 
     def register_events(self, events):
         for event in events:
@@ -28,7 +31,6 @@ class Tea:
             self._events[name][priority].append(coro)
 
     def dispatch(self, event, *args, **kwargs):
-        method = 'on_' + event
 
         listeners = self._listeners.get(event)
         if listeners:
@@ -37,7 +39,6 @@ class Tea:
                 if future.cancelled():
                     removed.append(i)
                     continue
-
                 try:
                     result = condition(*args)
                 except Exception as exc:
@@ -60,11 +61,11 @@ class Tea:
                     del listeners[idx]
 
         try:
-            coro_list = self._events.get(method)
+            coro_list = self._events.get(event)
         except KeyError:
             pass
         else:
-            asyncio.ensure_future(self._run_event(coro_list, method, *args, **kwargs), loop=self.loop)
+            asyncio.ensure_future(self._run_event(coro_list, event, *args, **kwargs), loop=self.loop)
 
     async def _run_event(self, coros, event_name, *args, **kwargs):
         try:
@@ -75,7 +76,7 @@ class Tea:
                 for coro in events:
                     result = await coro(*args, **kwargs)
                     if isinstance(result, TeaHandler):
-                        self.dispatch(result.event, result)
+                        self.dispatch(result.event[0], result.event[1])
                     if isinstance(result, CancelHandler):
                         break
                 if isinstance(result, CancelHandler):
@@ -88,7 +89,7 @@ class Tea:
             except asyncio.CancelledError:
                 pass
 
-    async def wait_for(self, event, *, check=None, timeout=None):
+    def wait_for(self, event, *, check=None, timeout=None):
         future = self.loop.create_future()
         if check is None:
             def _check(*args):
@@ -110,9 +111,18 @@ class Tea:
         print('Ignoring exception in {}'.format(event_method), file=sys.stderr)
         traceback.print_exc()
 
-    def run(self):
+    def register_connector(self, name):
+        if name in self.candidacy_connectors:
+            self.candidacy_connectors[name].setup(self)
+            self.connectors[name] = self.candidacy_connectors[name]
+            return True
+        else:
+            return None
 
+    def blend(self):
         try:
+            for key, value in self.connectors.items():
+                value.run()
             self.loop.run_forever()
         except KeyboardInterrupt:
             _cleanup_loop(self.loop)

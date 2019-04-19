@@ -9,4 +9,5 @@ class TeaHandler:
 class CancelHandler(TeaHandler):
     def __init__(self, **options):
         super().__init__(**options)
-        self.event = ("cancel_event", self)
+        self.event = ("event_canceled", self)
+
