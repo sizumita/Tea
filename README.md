@@ -4,7 +4,7 @@ Teaは、Asyncioのpluginシステムです。
 
 
 # Example
-メインスクリプト
+## メインスクリプト
 
 ```python
 # pluginsフォルダをメインスクリプトと同じ階層に作成してください。
@@ -17,7 +17,7 @@ tea.blend()
 
 ```
 
-Plugin Example
+## Plugin Example
 作りたいプラグインのメインPythonスクリプト名
 ```python
 # まず、pluginsフォルダに作成したいプラグインのファイルを作成してください。
