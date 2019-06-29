@@ -1,27 +1,20 @@
-import asyncio
-from tea.errors import TeaException
-from tea.priority import *
+from collections import OrderedDict
+from . import decorator
 
 
 class Plugin:
     name = None
+    event = decorator.event
+    events = {}
+    setting = {}
 
-    def __init__(self):
-        self.tea = None
-        self.events = []
-        self.setting = {}
-
-    def setup(self, tea, setting):
+    def __init__(self, tea):
         self.tea = tea
-        self.setting = setting
-        return self.events
 
-    def event(self, priority=NORMAL):
-
-        def decorator(coro):
-            if not asyncio.iscoroutinefunction(coro):
-                raise TeaException('event registered must be a coroutine function')
-            self.events.append((coro, priority))
-            return coro
-        return decorator
+    def add_event(self, event):
+        name = event.name
+        priority = event.priority
+        if not name in self.events.keys():
+            self.events[name] = OrderedDict(LOWEST=[], LOW=[], NORMAL=[], HIGH=[], HIGHEST=[], MONITOR=[])
+        self.events[name][priority].append(event)
 

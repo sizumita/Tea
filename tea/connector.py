@@ -1,19 +1,17 @@
 import asyncio
-from .tea import Tea
 
 
 class Connector:
-    tea = None
+    name = None
+    _enable_connector = True
 
-    def __init__(self):
-        self.enable = True
+    def __init__(self, tea):
         self.setting = {}
-
-    def setup(self, tea: Tea):
         self.tea = tea
-
-    def send_event(self, event, *args, **kwargs):
-        self.tea.dispatch(event, *args, **kwargs)
+        self.dispatch = self.tea.dispatch
 
     def run(self):
-        return True
+        pass
+
+    async def stop(self):
+        pass

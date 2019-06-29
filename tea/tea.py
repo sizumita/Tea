@@ -1,37 +1,67 @@
 import asyncio
 import sys
 import traceback
+import uuid
 from collections import OrderedDict
-from .handlers import TeaHandler, CancelHandler
-from .plugin.manager import PluginManager
 from .plugin.plugin import Plugin
+from .context import Context
+import importlib
+from . import errors
 
 
 class Tea:
     _listeners = {}
     _events = {}
-    candidacy_connectors = {}
     connectors = {}
+    raise_events = {}
+    plugins = {}
 
-    def __init__(self, plugin_filepath="plugins", loop=None):
+    def __init__(self, path='plugins', loop=None):
         self.loop = loop if loop else asyncio.get_event_loop()
-        self.manager = PluginManager(self, plugin_filepath)
-        self.manager.register_plugins()
         self._ready = asyncio.Event(loop=self.loop)
+        self.path = path
 
-    def register_events(self, events):
-        for event in events:
-            coro: Plugin = event[0]
-            priority = event[1]
-            name = coro.__name__
-            if name.startswith("on_"):
-                name = name[3:]
-            if not name in self._events.keys():
-                self._events[name] = OrderedDict(LOWEST=[], LOW=[], NORMAL=[], HIGH=[], HIGHEST=[], MONITOR=[])
-            self._events[name][priority].append(coro)
+    def add_event(self, func):
+        name = func.name
+        priority = func.priority
+        if name.startswith("on_"):
+            name = name[3:]
+        if not name in self._events.keys():
+            self._events[name] = OrderedDict(LOWEST=[], LOW=[], NORMAL=[], HIGH=[], HIGHEST=[], MONITOR=[])
+        self._events[name][priority].append(func)
+
+    def _load_from_class_spec(self, cls):
+        cls = cls(self)
+        self.plugins[cls.name] = cls
+        for name in dir(cls):
+            func = getattr(cls, name, None)
+            if callable(func):
+                is_allow_command = getattr(func, '__allow_command__', None)
+                if not is_allow_command:
+                    continue
+                self.add_event(func)
+
+    def get_plugin(self, name):
+        if name in self.plugins.keys():
+            return self.plugins.get(name)
+
+        return None
+
+    def load_plugins(self, name):
+        try:
+            lib = importlib.import_module(f'{self.path}.{name}')
+        except ImportError as e:
+            raise errors.PluginNotFound(name, e) from e
+        else:
+            for key, value in lib.__dict__.items():
+                if callable(value):
+                    is_enable = getattr(value, '__enable', None)
+                    if is_enable:
+                        if not isinstance(value(self), Plugin):
+                            raise errors.PluginCannotLoad(name)
+                        self._load_from_class_spec(value)
 
     def dispatch(self, event, *args, **kwargs):
-
         listeners = self._listeners.get(event)
         if listeners:
             removed = []
@@ -47,7 +77,7 @@ class Tea:
                 else:
                     if result:
                         if len(args) == 0:
-                            future.set_result(None)
+                            future.set_result()
                         elif len(args) == 1:
                             future.set_result(args[0])
                         else:
@@ -61,7 +91,7 @@ class Tea:
                     del listeners[idx]
 
         try:
-            coro_list = self._events.get(event)
+            coro_list = self._events[event]
         except KeyError:
             pass
         else:
@@ -72,20 +102,26 @@ class Tea:
             if not coros:
                 return
             for priority, events in coros.items():
-                result = None
+                event = asyncio.Event()
+                event_id = str(uuid.uuid4())
+                self.raise_events[event_id] = event
+                connector = kwargs.pop('connector', None)
+                context = Context(self, event_id, event_name, connector=connector)
+
                 for coro in events:
-                    result = await coro(*args, **kwargs)
-                    if isinstance(result, TeaHandler):
-                        self.dispatch(result.event[0], result.event[1])
-                    if isinstance(result, CancelHandler):
-                        break
-                if isinstance(result, CancelHandler):
-                    break
+                    await coro(context, *args, **kwargs)
+                    if context.is_finish():
+                        del self.raise_events[event_id]
+
+                del self.raise_events[event_id]
+                self.dispatch('finish_event', event_name, True)
+
         except asyncio.CancelledError:
             pass
         except Exception:
             try:
                 await self.on_error(event_name, *args, **kwargs)
+                self.dispatch('finish_event', event_name, False)
             except asyncio.CancelledError:
                 pass
 
@@ -108,16 +144,28 @@ class Tea:
         return asyncio.wait_for(future, timeout, loop=self.loop)
 
     async def on_error(self, event_method, *args, **kwargs):
+        self.dispatch('error', event_method, *args, **kwargs)
         print('Ignoring exception in {}'.format(event_method), file=sys.stderr)
         traceback.print_exc()
 
-    def register_connector(self, name):
-        if name in self.candidacy_connectors:
-            self.candidacy_connectors[name].setup(self)
-            self.connectors[name] = self.candidacy_connectors[name]
-            return True
+    def load_connector(self, name):
+        try:
+            lib = importlib.import_module(f'{self.path}.{name}')
+        except ImportError as e:
+            raise errors.PluginNotFound(f'{self.path}.{name}', e) from e
         else:
-            return None
+            for name in dir(lib):
+                value = getattr(lib, name, None)
+
+                if getattr(value, '_enable_connector', False):
+                    value = value(self)
+                    self.connectors[value.name] = value
+
+    def get_connector(self, name):
+        if name in self.connectors.keys():
+            return self.connectors[name]
+
+        return None
 
     def blend(self):
         try:
