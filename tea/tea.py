@@ -21,6 +21,10 @@ class Tea:
         self._ready = asyncio.Event(loop=self.loop)
         self.path = path
 
+    @property
+    def events(self):
+        return self._events
+
     def add_event(self, func):
         name = func.name
         priority = func.priority
@@ -39,6 +43,7 @@ class Tea:
                 is_allow_command = getattr(func, '__allow_command__', None)
                 if not is_allow_command:
                     continue
+
                 self.add_event(func)
 
     def get_plugin(self, name):
@@ -47,9 +52,9 @@ class Tea:
 
         return None
 
-    def load_plugins(self, name):
+    def load_plugin(self, name):
         try:
-            lib = importlib.import_module(f'{self.path}.{name}')
+            lib = importlib.import_module(f'{self.path}.{name}.main')
         except ImportError as e:
             raise errors.PluginNotFound(name, e) from e
         else:
@@ -107,9 +112,13 @@ class Tea:
                 self.raise_events[event_id] = event
                 connector = kwargs.pop('connector', None)
                 context = Context(self, event_id, event_name, connector=connector)
+                pass_context = kwargs.pop('pass_context', True)
 
                 for coro in events:
-                    await coro(context, *args, **kwargs)
+                    if pass_context:
+                        await coro(context, *args, **kwargs)
+                    else:
+                        await coro(*args, **kwargs)
                     if context.is_finish():
                         del self.raise_events[event_id]
 
@@ -150,9 +159,9 @@ class Tea:
 
     def load_connector(self, name):
         try:
-            lib = importlib.import_module(f'{self.path}.{name}')
+            lib = importlib.import_module(f'{self.path}.{name}.main')
         except ImportError as e:
-            raise errors.PluginNotFound(f'{self.path}.{name}', e) from e
+            raise errors.PluginNotFound(f'{self.path}.{name}.main', e) from e
         else:
             for name in dir(lib):
                 value = getattr(lib, name, None)

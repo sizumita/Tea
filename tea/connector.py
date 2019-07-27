@@ -1,4 +1,5 @@
-import asyncio
+from .plugin import config
+import os
 
 
 class Connector:
@@ -9,6 +10,7 @@ class Connector:
         self.setting = {}
         self.tea = tea
         self.dispatch = self.tea.dispatch
+        self.config = config.ConfigLoader(os.path.join(os.getcwd(), self.tea.path, self.name, 'config.yml'))
 
     def run(self):
         pass

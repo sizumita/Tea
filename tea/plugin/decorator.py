@@ -10,7 +10,7 @@ def event(name=None, *args, **kwargs):
             raise TeaException('event registered must be a coroutine function')
 
         coro.name = name or coro.__name__
-        coro.__allow_command = True
+        coro.__allow_command__ = True
         coro.priority = NORMAL
 
         for key, value in kwargs.items():
